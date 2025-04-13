@@ -1,0 +1,20 @@
+{
+    "name": "vendor/project-php",
+    "description": "project activeRecord",
+    "require": {
+        "php": "^8.1.2",
+        "ext-json": "*",
+        "ext-pdo": "*"
+    },
+    "license": "mit",
+    "autoload": {
+        "psr-4": {
+            "App\\": "src/"
+        }
+    },
+    "authors": [
+        {
+            "name": "sidnei quintal"
+        }
+    ]
+}

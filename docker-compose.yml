@@ -1,0 +1,106 @@
+version: '3.8'
+
+services:
+  nginx:
+    image: nginx:alpine  # Versão mais leve
+    container_name: nginx_server
+    ports:
+      - "8080:80"
+    volumes:
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf
+      - ./src:/var/www/html
+    networks:
+      - app_network
+    depends_on:
+      - php
+    restart: unless-stopped  # Adicionado para maior resiliência
+
+  php:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: php_fpm
+    volumes:
+      - ./src:/var/www/html
+    networks:
+      - app_network
+    environment:  # Adicionado para compatibilidade com workspace
+      - DB_HOST=mysql_db
+      - DB_USER=myuser
+      - DB_PASSWORD=mypassword
+      - DB_NAME=mydatabase
+      - REDIS_HOST=redis_cache
+    restart: unless-stopped
+
+  mysql:
+    image: mysql:8.0
+    container_name: mysql_db
+    environment:
+      MYSQL_ROOT_PASSWORD: rootpassword
+      MYSQL_DATABASE: mydatabase
+      MYSQL_USER: myuser
+      MYSQL_PASSWORD: mypassword
+      MYSQL_ROOT_HOST: '%'  # Permite conexão root de qualquer host
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./mysql/init.sql:/docker-entrypoint-initdb.d/init.sql  # Opcional: script de inicialização
+    networks:
+      - app_network
+    healthcheck:  # Adicionado healthcheck
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      timeout: 20s
+      interval: 5s
+      retries: 10
+    restart: unless-stopped
+
+  redis:
+    image: redis:alpine  # Versão mais leve
+    container_name: redis_cache
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - app_network
+    restart: unless-stopped
+
+  workspace:
+    build:
+      context: .
+      dockerfile: Dockerfile.workspace
+    container_name: app_workspace
+    volumes:
+      - ./src:/var/www/html
+      - ~/.ssh:/root/.ssh:ro  # Modo read-only para segurança
+      - ~/.composer:/tmp/composer  # Cache do Composer
+    networks:
+      - app_network
+    tty: true
+    stdin_open: true
+    depends_on:
+      mysql:
+        condition: service_healthy  # Espera MySQL estar pronto
+      php:
+        condition: service_started
+      redis:
+        condition: service_started
+    environment:
+      - DB_HOST=mysql_db
+      - DB_USER=myuser
+      - DB_PASSWORD=mypassword
+      - DB_NAME=mydatabase
+      - REDIS_HOST=redis_cache
+    working_dir: /var/www/html  # Adicionado working directory
+    command: sleep infinity
+
+volumes:
+  mysql_data:
+    driver: local
+  redis_data:
+    driver: local
+
+networks:
+  app_network:
+    driver: bridge
